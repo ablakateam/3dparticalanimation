@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimized High-Density 3D Symbol Particle Animation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <script>
+        let particles = [];
+        const numParticles = 12000;
+        const symbols = ['infinity', '%', '$', '@', '*'];
+        let currentSymbol = 0;
+        let zoom = 1;
+        let rotX = 0, rotY = 0;
+        let formationTime;
+        const fadeDuration = 5000;
+        let particleSystem;
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight, WEBGL);
+            colorMode(RGB, 255, 255, 255, 1);
+            particleSystem = new ParticleSystem();
+            initializeParticles();
+        }
+
+        function initializeParticles() {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle());
+            }
+            particleSystem.updateGrid(particles);
+        }
+
+        function draw() {
+            background(0);
+            
+            scale(zoom);
+            rotateX(rotX);
+            rotateY(rotY);
+
+            particleSystem.update();
+            particleSystem.display();
+
+            if (formationTime && millis() - formationTime > fadeDuration) {
+                particleSystem.resetParticles();
+                formationTime = null;
+            }
+        }
+
+        class Particle {
+            constructor() {
+                this.resetToRandom();
+                this.targetPos = this.pos.copy();
+                this.originalColor = this.color;
+            }
+
+            resetToRandom() {
+                this.pos = p5.Vector.random3D().mult(random(100, 300));
+                this.vel = p5.Vector.random3D().mult(0.1);
+                this.size = random(1, 3);
+                this.color = color(random(255), random(255), random(255), random(200, 255));
+            }
+
+            update() {
+                if (formationTime) {
+                    let timeSinceFormation = millis() - formationTime;
+                    if (timeSinceFormation < fadeDuration) {
+                        let t = timeSinceFormation / fadeDuration;
+                        this.color = lerpColor(this.originalColor, color(0, 0, 0, 0), t);
+                    } else {
+                        this.color = color(0, 0, 0, 0);
+                    }
+                }
+
+                let force = p5.Vector.sub(this.targetPos, this.pos);
+                force.mult(0.03);
+                this.vel.add(force);
+                this.vel.mult(0.97);
+                this.pos.add(this.vel);
+            }
+
+            setTarget(x, y, z) {
+                this.targetPos.set(x, y, z);
+                this.originalColor = this.color;
+            }
+        }
+
+        class ParticleSystem {
+            constructor() {
+                this.gridSize = 50;
+                this.grid = {};
+            }
+
+            updateGrid(particles) {
+                this.grid = {};
+                for (let p of particles) {
+                    let key = this.getGridKey(p.pos);
+                    if (!this.grid[key]) this.grid[key] = [];
+                    this.grid[key].push(p);
+                }
+            }
+
+            getGridKey(pos) {
+                return `${floor(pos.x / this.gridSize)},${floor(pos.y / this.gridSize)},${floor(pos.z / this.gridSize)}`;
+            }
+
+            update() {
+                for (let p of particles) {
+                    p.update();
+                }
+                this.updateGrid(particles);
+            }
+
+            display() {
+                beginShape(POINTS);
+                for (let key in this.grid) {
+                    let cell = this.grid[key];
+                    for (let p of cell) {
+                        stroke(p.color);
+                        strokeWeight(p.size);
+                        vertex(p.pos.x, p.pos.y, p.pos.z);
+                    }
+                }
+                endShape();
+            }
+
+            resetParticles() {
+                for (let p of particles) {
+                    p.resetToRandom();
+                }
+                this.updateGrid(particles);
+            }
+        }
+
+        function mousePressed() {
+            let symbol = symbols[currentSymbol];
+            currentSymbol = (currentSymbol + 1) % symbols.length;
+            
+            let points = getSymbolPoints(symbol);
+            for (let i = 0; i < particles.length; i++) {
+                let targetPoint = random(points);
+                particles[i].setTarget(targetPoint.x, targetPoint.y, targetPoint.z);
+            }
+            formationTime = millis();
+        }
+
+        function getSymbolPoints(symbol) {
+            let points = [];
+            let scale = 200;
+            let detail = 0.01;
+
+            switch (symbol) {
+                case 'infinity':
+                    for (let t = 0; t < TWO_PI; t += detail) {
+                        let x = scale * sin(t) / (1 + cos(t) * cos(t));
+                        let y = scale * sin(t) * cos(t) / (1 + cos(t) * cos(t));
+                        points.push(createVector(x, y, random(-5, 5)));
+                    }
+                    break;
+                case '%':
+                    for (let t = 0; t < TWO_PI; t += detail) {
+                        points.push(createVector(scale/4 * cos(t) - scale/2, scale/4 * sin(t) - scale/2, random(-5, 5)));
+                        points.push(createVector(scale/4 * cos(t) + scale/2, scale/4 * sin(t) + scale/2, random(-5, 5)));
+                    }
+                    for (let x = -scale; x <= scale; x += 2) {
+                        points.push(createVector(x, -x, random(-5, 5)));
+                    }
+                    break;
+                case '$':
+                    for (let t = 0; t < TWO_PI; t += detail) {
+                        let x = scale/2 * sin(t);
+                        let y = scale/2 * cos(2*t);
+                        points.push(createVector(x, y, random(-5, 5)));
+                    }
+                    for (let y = -scale/2; y <= scale/2; y += 2) {
+                        points.push(createVector(0, y, random(-5, 5)));
+                    }
+                    break;
+                case '@':
+                    for (let t = 0; t < TWO_PI; t += detail) {
+                        points.push(createVector(scale/2 * cos(t), scale/2 * sin(t), random(-5, 5)));
+                        if (t < PI) {
+                            points.push(createVector(scale/4 * cos(t), scale/4 * sin(t) - scale/8, random(-5, 5)));
+                        }
+                    }
+                    break;
+                case '*':
+                    for (let i = 0; i < 6; i++) {
+                        let angle = i * PI / 3;
+                        for (let r = 0; r <= scale/2; r += 2) {
+                            points.push(createVector(r * cos(angle), r * sin(angle), random(-5, 5)));
+                        }
+                    }
+                    break;
+            }
+            return points;
+        }
+
+        function mouseDragged() {
+            rotY += (mouseX - pmouseX) * 0.01;
+            rotX -= (mouseY - pmouseY) * 0.01;
+        }
+
+        function mouseWheel(event) {
+            zoom -= event.delta * 0.001;
+            zoom = constrain(zoom, 0.1, 5);
+            return false;
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+    </script>
+</body>
+</html>
